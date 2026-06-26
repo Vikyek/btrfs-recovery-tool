@@ -1,21 +1,75 @@
-# Byte-compiled / optimized / DLL files
+# ── Python artefacts ────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyo
+*.pyd
+.Python
 
-# Logs and databases
+# ── Build / packaging ────────────────────────────────────────────────────────
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+sdist/
+wheels/
+MANIFEST
+
+# ── Tests / coverage ─────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# ── Type-checkers & linters ──────────────────────────────────────────────────
+.mypy_cache/
+.ruff_cache/
+.pytype/
+
+# ── Environments ─────────────────────────────────────────────────────────────
+.env
+.env.local
+.venv/
+venv/
+env/
+
+# ── Logs (generated at runtime outside project dir, but catch any stray copies)
 *.log
 history.log
+clean_recovery.log
+clean_file_merge.log
+recovery_merge.log
+declutter.log
 
-# Recovery Output directories (from clean_recovery.py)
+# ── Runtime output directories (created by clean_recovery.py at ~/recovery/)
+# Listed here in case someone runs the tool from inside the project directory
+# or uses --recovery-dir pointing inside the project.
 recreated_dir_tree/
 duplicates/
 unmatched/
 archives/
+run_*/
+
+# ── Runtime data files (stats, state, totals)
 run_stats.json
 total_files.txt
-home/
 
-# Local configuration
-.env
-.env.local
+# ── Legacy output dirs (migrated on first run)
+recovered_home/
+recovered_duplicates/
+recovered_unmatched/
+
+# ── Temporary scan/device files
+*.ssdb
+*.tmp
+*.bak
+
+# ── macOS
+.DS_Store
+
+# ── IDEs
+.vscode/
+.idea/
