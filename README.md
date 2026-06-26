@@ -111,3 +111,10 @@ options:
   --uuid UUID           Btrfs filesystem UUID (Required)
   --chunks CHUNKS       Comma-separated offsets:lengths to scan (e.g. 'offset:length,offset:length')
 ```
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
