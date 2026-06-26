@@ -42,6 +42,10 @@ STATS_FILE       = os.path.join(RECOVERY_DIR, "run_stats.json")
 HISTORY_LOG      = os.path.join(RECOVERY_DIR, "history.log")   # never archived
 ARCHIVES_DIR     = os.path.join(RECOVERY_DIR, "archives")
 
+# clean-file-merge dedicated log directory (sibling project)
+CFM_DIR          = os.path.join(ACTIVE_ROOT, "clean-file-merge")
+CFM_LOGS_DIR     = os.path.join(CFM_DIR, "logs")
+
 # Run output dirs (existence = previous run present)
 RUN_DIRS = [RECOVERED_ROOT, DUPLICATES_ROOT, UNMATCHED_ROOT]
 
@@ -327,10 +331,27 @@ def detect_run_state():
 
 
 # ── Archive / delete helpers ──────────────────────────────────────────────────
+def _cfm_symlinks_in_recovery():
+    """Return list of (symlink_path, real_target) for all cfm session symlinks in RECOVERY_DIR."""
+    result = []
+    try:
+        for entry in os.scandir(RECOVERY_DIR):
+            if entry.name.startswith("cfm_session_") and entry.is_symlink():
+                target = os.readlink(entry.path)
+                result.append((entry.path, target))
+    except Exception:
+        pass
+    return result
+
+
 def archive_run(label=""):
     """
     Pack output dirs + per-run log + stats into
     ARCHIVES_DIR/run_<label>_<timestamp>.tar.gz.
+    For cfm session logs linked via symlinks in RECOVERY_DIR:
+      - squash (copy real content) into the archive under cfm_logs/<name>
+      - leave the real file at its location in ~/clean-file-merge/logs/
+      - leave the symlink in RECOVERY_DIR intact
     Returns archive path on success, None on failure.
     """
     os.makedirs(ARCHIVES_DIR, exist_ok=True)
@@ -347,6 +368,14 @@ def archive_run(label=""):
                 if os.path.exists(path):
                     arcname = os.path.relpath(path, RECOVERY_DIR)
                     tar.add(path, arcname=arcname)
+            # Squash-include cfm session logs (resolve symlinks, add real content)
+            for link_path, real_target in _cfm_symlinks_in_recovery():
+                resolved = real_target if os.path.isabs(real_target) else \
+                           os.path.normpath(os.path.join(RECOVERY_DIR, real_target))
+                if os.path.isfile(resolved):
+                    arcname = os.path.join("cfm_logs", os.path.basename(link_path))
+                    tar.add(resolved, arcname=arcname)
+                    history_log(f"  Squash-included cfm log: {resolved} -> {arcname}")
         mb = os.path.getsize(dest) / 1024 / 1024
         print(f"  Archive ready: {dest}  ({mb:.1f} MB)")
         recursive_chown(dest)
@@ -478,7 +507,26 @@ def shutdown_prompt(success, notifier, symlink_errors, totals):
             
             if HAS_MERGE_MODULE:
                 try:
-                    clean_file_merge.merge_to_active(RECOVERED_ROOT, ACTIVE_ROOT, log_file=_log_file, top_level=True)
+                    # cfm writes its own session log in ~/clean-file-merge/logs/
+                    cfm_log_path = clean_file_merge.get_session_log_path()
+                    cfm_log_fh   = open(cfm_log_path, "a", buffering=1)
+                    clean_file_merge.merge_to_active(
+                        RECOVERED_ROOT, ACTIVE_ROOT,
+                        log_file=cfm_log_fh, top_level=True
+                    )
+                    cfm_log_fh.close()
+                    clean_file_merge.history_log(f"Session completed OK -> {cfm_log_path}")
+                    # Symlink cfm session log into ~/recovery/ for cross-reference
+                    link_name = os.path.join(
+                        RECOVERY_DIR,
+                        f"cfm_{os.path.basename(cfm_log_path)}"
+                    )
+                    if not os.path.lexists(link_name):
+                        try:
+                            os.symlink(cfm_log_path, link_name)
+                            log(f"    Linked cfm log: {link_name} -> {cfm_log_path}")
+                        except Exception as sym_err:
+                            log(f"    [warn] could not create cfm log symlink: {sym_err}")
                     log("✔   Clean File Merge completed successfully.")
                     notifier.notify("Recovery merge completed.")
                 except Exception as e:
@@ -496,10 +544,18 @@ def shutdown_prompt(success, notifier, symlink_errors, totals):
                     log("❌  Error: clean-file-merge dependency not found! Please install it or make sure it is in your PATH.")
                     notifier.notify("Merge failed: dependency clean-file-merge not found.")
                 else:
+                    # Determine cfm session log path (next available in ~/clean-file-merge/logs/)
+                    os.makedirs(CFM_LOGS_DIR, exist_ok=True)
+                    n = 1
+                    while True:
+                        cfm_log_path = os.path.join(CFM_LOGS_DIR, f"session_{n:03d}.log")
+                        if not os.path.exists(cfm_log_path):
+                            break
+                        n += 1
                     if merge_script.endswith(".py"):
-                        cmd = ["sudo", "python3", merge_script, "--src", RECOVERED_ROOT, "--dst", ACTIVE_ROOT, "--log", os.path.join(RECOVERY_DIR, "clean_file_merge.log")]
+                        cmd = ["sudo", "python3", merge_script, "--src", RECOVERED_ROOT, "--dst", ACTIVE_ROOT, "--log", cfm_log_path]
                     else:
-                        cmd = ["sudo", merge_script, "--src", RECOVERED_ROOT, "--dst", ACTIVE_ROOT, "--log", os.path.join(RECOVERY_DIR, "clean_file_merge.log")]
+                        cmd = ["sudo", merge_script, "--src", RECOVERED_ROOT, "--dst", ACTIVE_ROOT, "--log", cfm_log_path]
                     try:
                         res = subprocess.run(cmd, capture_output=True, text=True)
                         for line in res.stdout.splitlines():
@@ -507,6 +563,17 @@ def shutdown_prompt(success, notifier, symlink_errors, totals):
                         if res.returncode == 0:
                             log("✔   Clean File Merge completed successfully.")
                             notifier.notify("Recovery merge completed.")
+                            # Symlink cfm session log into ~/recovery/ for cross-reference
+                            link_name = os.path.join(
+                                RECOVERY_DIR,
+                                f"cfm_{os.path.basename(cfm_log_path)}"
+                            )
+                            if not os.path.lexists(link_name) and os.path.isfile(cfm_log_path):
+                                try:
+                                    os.symlink(cfm_log_path, link_name)
+                                    log(f"    Linked cfm log: {link_name} -> {cfm_log_path}")
+                                except Exception as sym_err:
+                                    log(f"    [warn] could not create cfm log symlink: {sym_err}")
                         else:
                             log(f"❌  Clean File Merge failed (exit code {res.returncode}):")
                             for line in res.stderr.splitlines():
