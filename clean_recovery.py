@@ -903,10 +903,10 @@ def main():
 
     # Configure paths dynamically from CLI arguments
     ACTIVE_ROOT = os.path.abspath(args.active_root)
-    RECOVERY_DIR = os.path.abspath(args.recovery-dir) if hasattr(args, "recovery-dir") else os.path.abspath(args.recovery_dir)
+    RECOVERY_DIR = os.path.abspath(args.recovery_dir)
     RECOVERED_ROOT = os.path.join(RECOVERY_DIR, args.recreated_dir_name)
     DUPLICATES_ROOT = os.path.join(RECOVERY_DIR, args.duplicates_dir_name)
-    UNMATCHED_ROOT = os.path.join(RECOVERY_DIR, args.unmatched-dir-name)
+    UNMATCHED_ROOT = os.path.join(RECOVERY_DIR, args.unmatched_dir_name)
 
     LOG_FILE = os.path.join(RECOVERY_DIR, "clean_recovery.log")
     STATS_FILE = os.path.join(RECOVERY_DIR, "run_stats.json")
@@ -1031,6 +1031,7 @@ def main():
         notifier.notify("Step 2: Matching lost+found...")
         matched_dirs = 0
         struct_count = 0
+        total_lfs = 0
 
         # Scan for standard user subdirectories to infer home folder
         known_home_subdirs = {
@@ -1043,7 +1044,8 @@ def main():
         if os.path.isdir(lfs_source_dir):
             lfs = sorted([d for d in os.listdir(lfs_source_dir)
                           if d.startswith("lost+found_")])
-            log(f"  Found {len(lfs)} lost+found directories in {lfs_source_dir} to process.")
+            total_lfs = len(lfs)
+            log(f"  Found {total_lfs} lost+found directories in {lfs_source_dir} to process.")
 
             for idx, lf in enumerate(lfs):
                 lf_path = os.path.join(lfs_source_dir, lf)
@@ -1112,6 +1114,14 @@ def main():
                         log(f"  [match] {lf} -> {best_dst}  ({votes} files matched)")
                         renames_to_execute[lf_path] = best_dst
                         matched_dirs += 1
+
+            if getattr(args, "recheck_unmatched", False):
+                still_unmatched = total_lfs - matched_dirs
+                pct_matched = (matched_dirs / total_lfs * 100) if total_lfs else 0.0
+                log(f"\n  Rescanned unmatched summary:")
+                log(f"    New matches                 : {matched_dirs} ({pct_matched:.1f}%)")
+                log(f"    Still unmatched             : {still_unmatched} ({(100.0 - pct_matched):.1f}%)")
+                log(f"    Ratio (matched/unmatched)   : {matched_dirs}/{still_unmatched}")
 
         # ── Step 3: Merge matched directories ────────────────────────────────
         if not getattr(args, "recheck_duplicates", False):
@@ -1320,6 +1330,10 @@ def main():
         log("  Step 2 — Lost+found matching")
         log(f"    Matched by hash             : {_fmt(matched_dirs - struct_count, totals['lf_dirs_matched_hash'])}")
         log(f"    Matched structurally        : {_fmt(struct_count,               totals['lf_dirs_matched_structural'])}")
+        if getattr(args, "recheck_unmatched", False):
+            still_unmatched = total_lfs - matched_dirs
+            pct_matched = (matched_dirs / total_lfs * 100) if total_lfs else 0.0
+            log(f"    Rescanned unmatched ratio   : {matched_dirs}/{still_unmatched} ({pct_matched:.1f}% new matches)")
         log("")
         log("  Step 3 — Directory merging")
         log(f"    Directories merged          : {_fmt(len(renames_to_execute), totals['dirs_merged'])}")
