@@ -1,0 +1,21 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Logs and databases
+*.log
+history.log
+
+# Recovery Output directories (from clean_recovery.py)
+recreated_dir_tree/
+duplicates/
+unmatched/
+archives/
+run_stats.json
+total_files.txt
+home/
+
+# Local configuration
+.env
+.env.local
