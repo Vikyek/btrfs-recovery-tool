@@ -16,7 +16,7 @@ is a suite of Python scripts designed to assist in recovering, cleaning up, and 
 .SH STAGES
 .TP
 .B Stage 1: scan_subvols.py
-Directly reads the raw block device (e.g., \fI/dev/sdc1\fR) and scans candidate Btrfs chunk offset ranges for metadata trees containing \fBROOT_ITEM\fR structures matching the specified filesystem UUID. It lists subvolumes, generations, and root tree blocks, which are suitable inputs to feed into the \fBbtrfs restore -t <block>\fR command.
+Directly reads the raw block device (e.g., \fI/dev/sdX1\fR) and scans candidate Btrfs chunk offset ranges for metadata trees containing \fBROOT_ITEM\fR structures matching the specified filesystem UUID. It lists subvolumes, generations, and root tree blocks, which are suitable inputs to feed into the \fBbtrfs restore -t <block>\fR command.
 .TP
 .B Stage 2: clean_recovery.py
 Verifies restored files against the active filesystem. It automatically restores wrongly recovered text-file symlinks, squashes matching directory symlinks (converting them to real directories to prevent circular loops), deduplicates identical files against the active disk, resolves unmatched folder paths from \fBlost+found\fR using file hierarchy matching, and separates remaining unmatched files.
@@ -27,20 +27,20 @@ Recursively merges the cleaned recovery directory back into the active main file
 .SS scan_subvols.py Options
 .TP
 .BI \-\-device " DEVICE"
-Specify the block device partition to scan (default: /dev/sdc1).
+Specify the block device partition to scan (default: /dev/sdX1).
 .TP
 .BI \-\-uuid " UUID"
-Specify the filesystem UUID to match (default: 63531dbd-3d56-4e67-b038-a38b00b85232).
+Specify the filesystem UUID to match (Required, e.g. 12345678-abcd-1234-abcd-1234567890ab).
 .TP
 .BI \-\-chunks " CHUNKS"
 Comma-separated list of offset:length chunks to scan.
 .SS clean_recovery.py Options
 .TP
 .BI \-\-active-root " PATH"
-Path to the active filesystem directory to scan/dedup against (default: /home/v).
+Path to the active filesystem directory to scan/dedup against (default: ~/).
 .TP
 .BI \-\-recovery-dir " PATH"
-Path to the base recovery directory (default: /home/v/recovery).
+Path to the base recovery directory (default: ~/recovery).
 .TP
 .BI \-\-recreated-dir-name " NAME"
 Subfolder name containing the recovered files (default: recreated_dir_tree).
@@ -71,19 +71,19 @@ Pre-specify the response to the automatic recovery merge prompt (y: yes, n: no).
 .SS recovery_merge.py Options
 .TP
 .BI \-\-src " PATH"
-Source recovery tree directory to merge from (default: /home/v/recovery/recreated_dir_tree).
+Source recovery tree directory to merge from (default: ~/recovery/recreated_dir_tree).
 .TP
 .BI \-\-dst " PATH"
-Destination main filesystem directory to merge into (default: /home/v).
+Destination main filesystem directory to merge into (default: ~/).
 .TP
 .BI \-\-log " PATH"
-Log file path (default: /home/v/recovery/recovery_merge.log).
+Log file path (default: ~/recovery/recovery_merge.log).
 .SH FILES
-.I /home/v/recovery/clean_recovery.log
+.I ~/recovery/clean_recovery.log
 .RS
 Continuous per-run log file for the cleanup process.
 .RE
-.I /home/v/recovery/run_stats.json
+.I ~/recovery/run_stats.json
 .RS
 JSON file storing cumulative statistics across cleanup runs.
 .SH AUTHORS

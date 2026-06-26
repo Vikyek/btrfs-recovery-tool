@@ -85,9 +85,12 @@ def merge_to_active(src, dst, log_file=None):
 
 def main():
     parser = argparse.ArgumentParser(description="Merge recovered directory tree with main filesystem")
-    parser.add_argument("--src", default="/home/v/recovery/home", help="Source recovery tree directory")
-    parser.add_argument("--dst", default="/home/v", help="Destination main filesystem directory")
-    parser.add_argument("--log", default="/home/v/recovery/recovery_merge.log", help="Path to log file")
+    default_active = os.path.expanduser("~")
+    default_src = os.path.join(default_active, "recovery", "recreated_dir_tree")
+    default_log = os.path.join(default_active, "recovery", "recovery_merge.log")
+    parser.add_argument("--src", default=default_src, help="Source recovery tree directory")
+    parser.add_argument("--dst", default=default_active, help="Destination main filesystem directory")
+    parser.add_argument("--log", default=default_log, help="Path to log file")
     args = parser.parse_args()
 
     src_dir = os.path.abspath(args.src)

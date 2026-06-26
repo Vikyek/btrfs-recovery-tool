@@ -26,8 +26,8 @@ DEFAULT_CHUNKS = [
 
 def main():
     parser = argparse.ArgumentParser(description="Scan Btrfs partition block-by-block for subvolume ROOT_ITEMs")
-    parser.add_argument("--device", default="/dev/sdc1", help="Device block file (e.g. /dev/sdc1)")
-    parser.add_argument("--uuid", default="63531dbd-3d56-4e67-b038-a38b00b85232", help="Btrfs filesystem UUID (string format)")
+    parser.add_argument("--device", default="/dev/sdX1", help="Device block file (e.g. /dev/sdX1)")
+    parser.add_argument("--uuid", required=True, help="Btrfs filesystem UUID (string format)")
     parser.add_argument("--chunks", help="Comma-separated offsets:lengths to scan (e.g. '38797312:1073741824,144993943552:1073741824')")
     args = parser.parse_args()
 

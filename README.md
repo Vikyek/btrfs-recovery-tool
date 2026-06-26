@@ -42,21 +42,21 @@ Recursively merges the final cleaned recovery folder back into the active main f
 ### Stage 1: Discover Subvolumes & Generations
 Scan a partition for subvolumes matching a filesystem UUID:
 ```bash
-sudo python3 scan_subvols.py --device /dev/sdc1 --uuid 63531dbd-3d56-4e67-b038-a38b00b85232
+sudo python3 scan_subvols.py --device /dev/sdX1 --uuid 12345678-abcd-1234-abcd-1234567890ab
 ```
 
 ### Intermediate Step: Run Btrfs Restore
 Use the block numbers output by Stage 1 to restore files to a recovery directory:
 ```bash
-sudo btrfs restore -r 259 -t <discovered_block_number> /dev/sdc1 /home/v/recovery/recreated_dir_tree
+sudo btrfs restore -r 259 -t <discovered_block_number> /dev/sdX1 /home/user/recovery/recreated_dir_tree
 ```
 
 ### Stage 2: Verify & Clean Recovery
 Scan and deduplicate the recovered files against the active filesystem:
 ```bash
 sudo python3 clean_recovery.py \
-  --active-root /home/v \
-  --recovery-dir /home/v/recovery \
+  --active-root /home/user \
+  --recovery-dir /home/user/recovery \
   --recreated-dir-name recreated_dir_tree \
   --merge y
 ```
@@ -67,7 +67,7 @@ sudo python3 clean_recovery.py \
 ### Stage 3: Merge back to Active Directory
 If run manually, merge the clean recovery directory back:
 ```bash
-sudo python3 recovery_merge.py --src /home/v/recovery/recreated_dir_tree --dst /home/v
+sudo python3 recovery_merge.py --src /home/user/recovery/recreated_dir_tree --dst /home/user
 ```
 
 ---
@@ -78,8 +78,8 @@ sudo python3 recovery_merge.py --src /home/v/recovery/recreated_dir_tree --dst /
 ```
 options:
   -h, --help            show this help message and exit
-  --active-root PATH    Path to main active filesystem directory (default: /home/v)
-  --recovery-dir PATH   Path to base recovery directory (default: /home/v/recovery)
+  --active-root PATH    Path to main active filesystem directory (default: ~/ or current user home)
+  --recovery-dir PATH   Path to base recovery directory (default: ~/recovery)
   --recreated-dir-name NAME
                         Folder name of recreated directory tree under recovery-dir (default: recreated_dir_tree)
   --duplicates-dir-name NAME
@@ -98,16 +98,16 @@ options:
 ```
 options:
   -h, --help            show this help message and exit
-  --src PATH            Source recovery tree directory (default: /home/v/recovery/recreated_dir_tree)
-  --dst PATH            Destination main filesystem directory (default: /home/v)
-  --log PATH            Path to log file (default: /home/v/recovery/recovery_merge.log)
+  --src PATH            Source recovery tree directory (default: ~/recovery/recreated_dir_tree)
+  --dst PATH            Destination main filesystem directory (default: ~/)
+  --log PATH            Path to log file (default: ~/recovery/recovery_merge.log)
 ```
 
 ### `scan_subvols.py`
 ```
 options:
   -h, --help            show this help message and exit
-  --device DEV          Device block file (default: /dev/sdc1)
-  --uuid UUID           Btrfs filesystem UUID (default: 63531dbd-3d56-4e67-b038-a38b00b85232)
+  --device DEV          Device block file (default: /dev/sdX1)
+  --uuid UUID           Btrfs filesystem UUID (Required)
   --chunks CHUNKS       Comma-separated offsets:lengths to scan (e.g. 'offset:length,offset:length')
 ```

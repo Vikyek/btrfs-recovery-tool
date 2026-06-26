@@ -18,8 +18,8 @@ import datetime
 from collections import defaultdict
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-ACTIVE_ROOT      = "/home/v"
-RECOVERY_DIR     = "/home/v/recovery"
+ACTIVE_ROOT      = os.path.expanduser("~")
+RECOVERY_DIR     = os.path.join(ACTIVE_ROOT, "recovery")
 RECOVERED_ROOT   = os.path.join(RECOVERY_DIR, "recreated_dir_tree")
 DUPLICATES_ROOT  = os.path.join(RECOVERY_DIR, "duplicates")
 UNMATCHED_ROOT   = os.path.join(RECOVERY_DIR, "unmatched")
@@ -32,9 +32,9 @@ ARCHIVES_DIR     = os.path.join(RECOVERY_DIR, "archives")
 RUN_DIRS = [RECOVERED_ROOT, DUPLICATES_ROOT, UNMATCHED_ROOT]
 
 # Legacy paths – migrated on first run
-LEGACY_RECOVERED_ROOT  = "/home/v/recovered_home"
-LEGACY_DUPLICATES_ROOT = "/home/v/recovered_duplicates"
-LEGACY_UNMATCHED_ROOT  = "/home/v/recovered_unmatched"
+LEGACY_RECOVERED_ROOT  = os.path.join(os.path.expanduser("~"), "recovered_home")
+LEGACY_DUPLICATES_ROOT = os.path.join(os.path.expanduser("~"), "recovered_duplicates")
+LEGACY_UNMATCHED_ROOT  = os.path.join(os.path.expanduser("~"), "recovered_unmatched")
 
 HASH_BLOCK_SIZE = 65536
 
@@ -888,8 +888,8 @@ def main():
 
     import argparse
     parser = argparse.ArgumentParser(description="Btrfs recovery cleanup script")
-    parser.add_argument("--active-root", default="/home/v", help="Path to main active filesystem directory")
-    parser.add_argument("--recovery-dir", default="/home/v/recovery", help="Path to base recovery directory")
+    parser.add_argument("--active-root", default=os.path.expanduser("~"), help="Path to main active filesystem directory")
+    parser.add_argument("--recovery-dir", default=os.path.join(os.path.expanduser("~"), "recovery"), help="Path to base recovery directory")
     parser.add_argument("--recreated-dir-name", default="recreated_dir_tree", help="Name of recreated directory tree folder under recovery-dir")
     parser.add_argument("--duplicates-dir-name", default="duplicates", help="Name of duplicates folder under recovery-dir")
     parser.add_argument("--unmatched-dir-name", default="unmatched", help="Name of unmatched folder under recovery-dir")
