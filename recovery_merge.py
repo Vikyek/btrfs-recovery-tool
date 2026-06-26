@@ -92,7 +92,7 @@ def move_file_or_dir(src, dst):
 
     recursive_chown(dst)
 
-def redirect_home_system_dir(path):
+def redirect_home_system_dir(path, src=None):
     abs_path = os.path.abspath(path)
     parent = os.path.dirname(abs_path)
     parts = parent.split(os.sep)
@@ -111,6 +111,25 @@ def redirect_home_system_dir(path):
         }
         if name in mapping:
             return os.path.join(parent, mapping[name])
+
+        # Autohandle/redirect misplaced golang.org/x/tools components
+        if src and os.path.isdir(src):
+            go_tools_names = {"cmd", "internal", "refactor", "present", "playground"}
+            if name in go_tools_names:
+                is_x_tools = False
+                if name == "cmd":
+                    is_x_tools = any(os.path.exists(os.path.join(src, sub)) for sub in ["goyacc", "digraph"])
+                elif name == "internal":
+                    is_x_tools = any(os.path.exists(os.path.join(src, sub)) for sub in ["typesinternal", "facts", "gcimporter"])
+                elif name == "refactor":
+                    is_x_tools = any(os.path.exists(os.path.join(src, sub)) for sub in ["eg", "rename"])
+                elif name == "present":
+                    is_x_tools = os.path.exists(os.path.join(src, "testdata"))
+                elif name == "playground":
+                    is_x_tools = os.path.exists(os.path.join(src, "socket"))
+
+                if is_x_tools:
+                    return os.path.join(parent, "go", "src", "golang.org", "x", "tools", name)
     return path
 
 def merge_to_active(src, dst, log_file=None, top_level=False):
@@ -123,7 +142,7 @@ def merge_to_active(src, dst, log_file=None, top_level=False):
         return
 
     if top_level:
-        dst = redirect_home_system_dir(dst)
+        dst = redirect_home_system_dir(dst, src)
 
     # If dst is a broken symlink, allow replacing it
     if is_broken_symlink(dst):
@@ -147,10 +166,27 @@ def merge_to_active(src, dst, log_file=None, top_level=False):
             s = os.path.join(src, item)
             d = os.path.join(dst, item)
             if top_level:
-                redirected_d = redirect_home_system_dir(d)
+                redirected_d = redirect_home_system_dir(d, s)
                 if redirected_d != d:
                     log(f"[redirect] Redirecting system directory merge: {item} -> {redirected_d}", log_file)
                     d = redirected_d
+            else:
+                # Redirect misplaced golang.org/x/tools/go/... subdirectories (if merging inside ~/go)
+                parent_abs = os.path.abspath(dst)
+                go_dir = os.path.join(os.path.expanduser("~"), "go")
+                if parent_abs == go_dir and item in {"analysis", "ast", "callgraph"}:
+                    is_x_tools = False
+                    if item == "analysis":
+                        is_x_tools = any(os.path.exists(os.path.join(s, sub)) for sub in ["passes", "analysistest"])
+                    elif item == "ast":
+                        is_x_tools = any(os.path.exists(os.path.join(s, sub)) for sub in ["astutil", "inspector"])
+                    elif item == "callgraph":
+                        is_x_tools = any(os.path.exists(os.path.join(s, sub)) for sub in ["cha", "rta", "static"])
+                    
+                    if is_x_tools:
+                        target_dst = os.path.join(os.path.expanduser("~"), "go", "src", "golang.org", "x", "tools", "go", item)
+                        log(f"[redirect] Redirecting misplaced Go tools subdir: {item} -> {target_dst}", log_file)
+                        d = target_dst
             merge_to_active(s, d, log_file, top_level=False)
         # Clean up empty directory in recovery tree
         try:
