@@ -10,6 +10,43 @@ import shutil
 import argparse
 import datetime
 
+def recursive_chown(path):
+    """
+    Recursively changes ownership of path to the invoking sudo user (SUDO_UID/SUDO_GID).
+    If not running via sudo, does nothing.
+    """
+    sudo_uid = os.environ.get("SUDO_UID")
+    sudo_gid = os.environ.get("SUDO_GID")
+    if not sudo_uid or not sudo_gid:
+        return
+    try:
+        uid = int(sudo_uid)
+        gid = int(sudo_gid)
+    except (ValueError, TypeError):
+        return
+
+    try:
+        if os.path.lexists(path):
+            os.chown(path, uid, gid, follow_symlinks=False)
+        if os.path.isdir(path) and not os.path.islink(path):
+            for root, dirs, files in os.walk(path, followlinks=False):
+                try:
+                    os.chown(root, uid, gid, follow_symlinks=False)
+                except Exception:
+                    pass
+                for d in dirs:
+                    try:
+                        os.chown(os.path.join(root, d), uid, gid, follow_symlinks=False)
+                    except Exception:
+                        pass
+                for f in files:
+                    try:
+                        os.chown(os.path.join(root, f), uid, gid, follow_symlinks=False)
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
 def log(msg, log_file=None):
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     formatted = f"[{ts}] {msg}"
@@ -30,7 +67,18 @@ def move_file_or_dir(src, dst):
     Uses os.replace for atomic rename on same filesystem.
     Falls back to copy + delete for cross-device moves.
     """
-    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    parent = os.path.dirname(dst)
+    new_dirs = []
+    curr = parent
+    while curr and curr != "/" and not os.path.exists(curr):
+        new_dirs.append(curr)
+        curr = os.path.dirname(curr)
+
+    os.makedirs(parent, exist_ok=True)
+    
+    for d in new_dirs:
+        recursive_chown(d)
+
     try:
         os.replace(src, dst)
     except OSError:
@@ -41,6 +89,8 @@ def move_file_or_dir(src, dst):
         else:
             shutil.copy2(src, dst)
             os.remove(src)
+
+    recursive_chown(dst)
 
 def redirect_home_system_dir(path):
     abs_path = os.path.abspath(path)
@@ -126,9 +176,20 @@ def main():
     dst_dir = os.path.abspath(args.dst)
     log_path = os.path.abspath(args.log)
 
-    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    parent = os.path.dirname(log_path)
+    new_dirs = []
+    curr = parent
+    while curr and curr != "/" and not os.path.exists(curr):
+        new_dirs.append(curr)
+        curr = os.path.dirname(curr)
+
+    os.makedirs(parent, exist_ok=True)
+    for d in new_dirs:
+        recursive_chown(d)
+
     try:
         log_fh = open(log_path, "a", buffering=1)
+        recursive_chown(log_path)
     except Exception as e:
         print(f"Error opening log file {log_path}: {e}")
         sys.exit(1)

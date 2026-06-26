@@ -42,6 +42,44 @@ _log_file = None
 args = None
 
 
+def recursive_chown(path):
+    """
+    Recursively changes ownership of path to the invoking sudo user (SUDO_UID/SUDO_GID).
+    If not running via sudo, does nothing.
+    """
+    sudo_uid = os.environ.get("SUDO_UID")
+    sudo_gid = os.environ.get("SUDO_GID")
+    if not sudo_uid or not sudo_gid:
+        return
+    try:
+        uid = int(sudo_uid)
+        gid = int(sudo_gid)
+    except (ValueError, TypeError):
+        return
+
+    try:
+        if os.path.lexists(path):
+            os.chown(path, uid, gid, follow_symlinks=False)
+        if os.path.isdir(path) and not os.path.islink(path):
+            for root, dirs, files in os.walk(path, followlinks=False):
+                try:
+                    os.chown(root, uid, gid, follow_symlinks=False)
+                except Exception:
+                    pass
+                for d in dirs:
+                    try:
+                        os.chown(os.path.join(root, d), uid, gid, follow_symlinks=False)
+                    except Exception:
+                        pass
+                for f in files:
+                    try:
+                        os.chown(os.path.join(root, f), uid, gid, follow_symlinks=False)
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
+
 # ── Logging ───────────────────────────────────────────────────────────────────
 def log(msg):
     print(msg)
@@ -57,6 +95,7 @@ def history_log(msg):
     """Write timestamped entry to the history log file (always outside run archive)."""
     try:
         os.makedirs(os.path.dirname(HISTORY_LOG), exist_ok=True)
+        # Note: we will chown HISTORY_LOG's parent directory and the file itself in main
         ts = datetime.datetime.now().isoformat()
         with open(HISTORY_LOG, "a") as f:
             f.write(f"[{ts}] {msg}\n")
@@ -97,6 +136,7 @@ def save_stats(totals):
     try:
         with open(STATS_FILE, "w") as f:
             json.dump(totals, f, indent=2)
+        recursive_chown(STATS_FILE)
     except Exception as e:
         log(f"  [stats save error] {e}")
 
@@ -150,7 +190,7 @@ class DesktopNotifier:
                             continue
                         if dbus_addr:
                             break
-
+                
                 if not dbus_addr:
                     dbus_addr = f"unix:path=/run/user/{uid}/bus"
 
@@ -261,6 +301,7 @@ def archive_run(label=""):
     Returns archive path on success, None on failure.
     """
     os.makedirs(ARCHIVES_DIR, exist_ok=True)
+    recursive_chown(ARCHIVES_DIR)
     ts   = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     slug = f"_{label}" if label else ""
     dest = os.path.join(ARCHIVES_DIR, f"run{slug}_{ts}.tar.gz")
@@ -275,6 +316,7 @@ def archive_run(label=""):
                     tar.add(path, arcname=arcname)
         mb = os.path.getsize(dest) / 1024 / 1024
         print(f"  Archive ready: {dest}  ({mb:.1f} MB)")
+        recursive_chown(dest)
         history_log(f"Archive created: {dest} ({mb:.1f} MB)")
         return dest
     except Exception as e:
@@ -459,7 +501,18 @@ def move_file_or_dir(src, dst):
     If it's on the same filesystem, uses os.replace (atomic rename).
     If it's cross-device, copies and then explicitly deletes the source.
     """
-    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    parent = os.path.dirname(dst)
+    new_dirs = []
+    curr = parent
+    while curr and curr != "/" and not os.path.exists(curr):
+        new_dirs.append(curr)
+        curr = os.path.dirname(curr)
+
+    os.makedirs(parent, exist_ok=True)
+    
+    for d in new_dirs:
+        recursive_chown(d)
+
     try:
         os.replace(src, dst)
     except OSError:
@@ -470,6 +523,8 @@ def move_file_or_dir(src, dst):
         else:
             shutil.copy2(src, dst)
             os.remove(src)
+
+    recursive_chown(dst)
 
 
 def run_recheck_duplicates(active_files_by_size, active_hash_cache, notifier):
@@ -894,6 +949,7 @@ def merge_dirs(src, dst, top_level=False):
 # ── Legacy migration ──────────────────────────────────────────────────────────
 def migrate_legacy_dirs():
     os.makedirs(RECOVERY_DIR, exist_ok=True)
+    recursive_chown(RECOVERY_DIR)
     
     # Also migrate old "home" subfolder to the new configured RECOVERED_ROOT
     old_recovered_root = os.path.join(RECOVERY_DIR, "home")
@@ -959,6 +1015,7 @@ def main():
     LEGACY_UNMATCHED_ROOT  = os.path.join(os.path.dirname(ACTIVE_ROOT), "recovered_unmatched")
 
     os.makedirs(RECOVERY_DIR, exist_ok=True)
+    recursive_chown(RECOVERY_DIR)
     notifier = DesktopNotifier()
 
     # ── Pre-run startup check (before opening the per-run log) ───────────────
@@ -968,6 +1025,7 @@ def main():
 
     # ── Open per-run log (append so resume continues where it left off) ───────
     _log_file = open(LOG_FILE, "a", buffering=1)
+    recursive_chown(LOG_FILE)
     ts = datetime.datetime.now().isoformat()
     log(f"\n{'='*60}")
     log(f"Recovery cleanup started at {ts}")
@@ -1401,6 +1459,7 @@ def main():
 
         if _log_file:
             _log_file.close()
+        recursive_chown(RECOVERY_DIR)
 
         shutdown_prompt(success, notifier, symlink_errors, totals)
 
