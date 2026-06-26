@@ -776,9 +776,42 @@ def step0_restore_and_squash(root_dir, notifier):
     return restored, squashed, tombstones, symlink_errors
 
 
+# ── is_home_dir & redirect_home_system_dir ────────────────────────────────────
+def is_home_dir(path):
+    abs_path = os.path.abspath(path)
+    if abs_path == os.path.expanduser("~"):
+        return True
+    parts = abs_path.split(os.sep)
+    if len(parts) == 3 and parts[1] == 'home':
+        return True
+    return False
+
+def redirect_home_system_dir(path):
+    abs_path = os.path.abspath(path)
+    parent = os.path.dirname(abs_path)
+    parts = parent.split(os.sep)
+    is_home = (parent == os.path.expanduser("~") or (len(parts) == 3 and parts[1] == 'home'))
+    if is_home:
+        name = os.path.basename(abs_path)
+        mapping = {
+            "sbin": os.path.join(".local", "sbin"),
+            "bin": os.path.join(".local", "bin"),
+            "lib": os.path.join(".local", "lib"),
+            "libexec": os.path.join(".local", "libexec"),
+            "include": os.path.join(".local", "include"),
+            "share": os.path.join(".local", "share"),
+            "ssl": os.path.join(".local", "share", "ssl"),
+            "local": ".local"
+        }
+        if name in mapping:
+            return os.path.join(parent, mapping[name])
+    return path
+
 # ── merge_dirs ────────────────────────────────────────────────────────────────
-def merge_dirs(src, dst):
+def merge_dirs(src, dst, top_level=False):
     """Recursively merge src into dst (in-place rename when possible)."""
+    if top_level:
+        dst = redirect_home_system_dir(dst)
     # Resolve text-file symlink at dst if present
     if not os.path.islink(dst) and os.path.isfile(dst):
         t, _ = try_read_as_symlink(dst)
@@ -813,6 +846,11 @@ def merge_dirs(src, dst):
     for item in os.listdir(src):
         s = os.path.join(src, item)
         d = os.path.join(dst, item)
+        if top_level:
+            redirected_d = redirect_home_system_dir(d)
+            if redirected_d != d:
+                log(f"  [redirect] Redirecting system directory merge: {item} -> {redirected_d}")
+                d = redirected_d
         if os.path.islink(s):
             # Preserve symlinks
             if not os.path.lexists(d):
@@ -828,7 +866,7 @@ def merge_dirs(src, dst):
                 except Exception:
                     pass
         elif os.path.isdir(s):
-            merge_dirs(s, d)
+            merge_dirs(s, d, top_level=False)
         else:
             if not os.path.lexists(d):
                 try:
@@ -1111,8 +1149,11 @@ def main():
                     best_dst = max(candidates, key=candidates.get)
                     votes = candidates[best_dst]
                     if votes >= 1:
-                        log(f"  [match] {lf} -> {best_dst}  ({votes} files matched)")
-                        renames_to_execute[lf_path] = best_dst
+                        redirected_dst = redirect_home_system_dir(best_dst)
+                        if redirected_dst != best_dst:
+                            log(f"  [redirect] System directory match redirected: {best_dst} -> {redirected_dst}")
+                        log(f"  [match] {lf} -> {redirected_dst}  ({votes} files matched)")
+                        renames_to_execute[lf_path] = redirected_dst
                         matched_dirs += 1
 
             if getattr(args, "recheck_unmatched", False):
@@ -1129,7 +1170,7 @@ def main():
             notifier.notify("Step 3: Merging directories...")
             for src, dst in renames_to_execute.items():
                 log(f"  [merge] {os.path.basename(src)} -> {dst}")
-                merge_dirs(src, dst)
+                merge_dirs(src, dst, top_level=True)
 
         # ── Step 4: Deduplicate recovered files against active disk ──────────
         if not getattr(args, "recheck_unmatched", False) and not getattr(args, "recheck_duplicates", False):

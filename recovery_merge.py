@@ -42,7 +42,28 @@ def move_file_or_dir(src, dst):
             shutil.copy2(src, dst)
             os.remove(src)
 
-def merge_to_active(src, dst, log_file=None):
+def redirect_home_system_dir(path):
+    abs_path = os.path.abspath(path)
+    parent = os.path.dirname(abs_path)
+    parts = parent.split(os.sep)
+    is_home = (parent == os.path.expanduser("~") or (len(parts) == 3 and parts[1] == 'home'))
+    if is_home:
+        name = os.path.basename(abs_path)
+        mapping = {
+            "sbin": os.path.join(".local", "sbin"),
+            "bin": os.path.join(".local", "bin"),
+            "lib": os.path.join(".local", "lib"),
+            "libexec": os.path.join(".local", "libexec"),
+            "include": os.path.join(".local", "include"),
+            "share": os.path.join(".local", "share"),
+            "ssl": os.path.join(".local", "share", "ssl"),
+            "local": ".local"
+        }
+        if name in mapping:
+            return os.path.join(parent, mapping[name])
+    return path
+
+def merge_to_active(src, dst, log_file=None, top_level=False):
     """
     Recursively merge src directory tree into dst.
     Moves files/symlinks. Does not overwrite existing files (logs and skips them).
@@ -50,6 +71,9 @@ def merge_to_active(src, dst, log_file=None):
     """
     if not os.path.exists(src) and not os.path.islink(src):
         return
+
+    if top_level:
+        dst = redirect_home_system_dir(dst)
 
     # If dst is a broken symlink, allow replacing it
     if is_broken_symlink(dst):
@@ -72,7 +96,12 @@ def merge_to_active(src, dst, log_file=None):
         for item in os.listdir(src):
             s = os.path.join(src, item)
             d = os.path.join(dst, item)
-            merge_to_active(s, d, log_file)
+            if top_level:
+                redirected_d = redirect_home_system_dir(d)
+                if redirected_d != d:
+                    log(f"[redirect] Redirecting system directory merge: {item} -> {redirected_d}", log_file)
+                    d = redirected_d
+            merge_to_active(s, d, log_file, top_level=False)
         # Clean up empty directory in recovery tree
         try:
             if not os.listdir(src):
@@ -115,7 +144,7 @@ def main():
         sys.exit(1)
 
     try:
-        merge_to_active(src_dir, dst_dir, log_fh)
+        merge_to_active(src_dir, dst_dir, log_fh, top_level=True)
         log("Recovery Merge completed successfully.", log_fh)
     except Exception as e:
         log(f"Fatal error during merge: {e}", log_fh)
