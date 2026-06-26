@@ -17,6 +17,20 @@ import shlex
 import datetime
 from collections import defaultdict
 
+# Try importing clean_file_merge natively, fallback to dev path if not installed
+try:
+    import clean_file_merge
+    HAS_MERGE_MODULE = True
+except ImportError:
+    # Add the local development path to sys.path
+    sys.path.insert(0, "/home/v/Projects/clean-file-merge/src")
+    try:
+        import clean_file_merge
+        HAS_MERGE_MODULE = True
+    except ImportError:
+        HAS_MERGE_MODULE = False
+
+
 # ── Paths ─────────────────────────────────────────────────────────────────────
 ACTIVE_ROOT      = os.path.expanduser("~")
 RECOVERY_DIR     = os.path.join(ACTIVE_ROOT, "recovery")
@@ -459,37 +473,48 @@ def shutdown_prompt(success, notifier, symlink_errors, totals):
     if not has_errors:
         ans_merge = prompt_or_flag("Run recovery merge into active filesystem? [y/N]: ", default="n", valid="yn", flag_name="merge")
         if ans_merge == "y":
-            log("Running clean_file_merge.py...")
+            log("Running clean-file-merge...")
             notifier.notify("Running recovery merge...")
-            merge_script = shutil.which("clean-file-merge")
-            if not merge_script:
-                dev_path = "/home/v/Projects/clean-file-merge/clean_file_merge.py"
-                if os.path.exists(dev_path):
-                    merge_script = dev_path
-
-            if not merge_script:
-                log("❌  Error: clean-file-merge dependency not found! Please install it or make sure it is in your PATH.")
-                notifier.notify("Merge failed: dependency clean-file-merge not found.")
-            else:
-                if merge_script.endswith(".py"):
-                    cmd = ["sudo", "python3", merge_script, "--src", RECOVERED_ROOT, "--dst", ACTIVE_ROOT, "--log", os.path.join(RECOVERY_DIR, "clean_file_merge.log")]
-                else:
-                    cmd = ["sudo", merge_script, "--src", RECOVERED_ROOT, "--dst", ACTIVE_ROOT, "--log", os.path.join(RECOVERY_DIR, "clean_file_merge.log")]
+            
+            if HAS_MERGE_MODULE:
                 try:
-                    res = subprocess.run(cmd, capture_output=True, text=True)
-                    for line in res.stdout.splitlines():
-                        log(f"  [merge] {line}")
-                    if res.returncode == 0:
-                        log("✔   Clean File Merge completed successfully.")
-                        notifier.notify("Recovery merge completed.")
-                    else:
-                        log(f"❌  Clean File Merge failed (exit code {res.returncode}):")
-                        for line in res.stderr.splitlines():
-                            log(f"  [merge err] {line}")
-                        notifier.notify("Recovery merge failed.")
+                    clean_file_merge.merge_to_active(RECOVERED_ROOT, ACTIVE_ROOT, log_file=_log_file, top_level=True)
+                    log("✔   Clean File Merge completed successfully.")
+                    notifier.notify("Recovery merge completed.")
                 except Exception as e:
-                    log(f"❌  Error executing merge: {e}")
+                    log(f"❌  Error executing native merge: {e}")
                     notifier.notify("Recovery merge execution error.")
+            else:
+                # Fallback to subprocess CLI execution if module not found
+                merge_script = shutil.which("clean-file-merge")
+                if not merge_script:
+                    dev_path = "/home/v/Projects/clean-file-merge/src/clean_file_merge/main.py"
+                    if os.path.exists(dev_path):
+                        merge_script = dev_path
+
+                if not merge_script:
+                    log("❌  Error: clean-file-merge dependency not found! Please install it or make sure it is in your PATH.")
+                    notifier.notify("Merge failed: dependency clean-file-merge not found.")
+                else:
+                    if merge_script.endswith(".py"):
+                        cmd = ["sudo", "python3", merge_script, "--src", RECOVERED_ROOT, "--dst", ACTIVE_ROOT, "--log", os.path.join(RECOVERY_DIR, "clean_file_merge.log")]
+                    else:
+                        cmd = ["sudo", merge_script, "--src", RECOVERED_ROOT, "--dst", ACTIVE_ROOT, "--log", os.path.join(RECOVERY_DIR, "clean_file_merge.log")]
+                    try:
+                        res = subprocess.run(cmd, capture_output=True, text=True)
+                        for line in res.stdout.splitlines():
+                            log(f"  [merge] {line}")
+                        if res.returncode == 0:
+                            log("✔   Clean File Merge completed successfully.")
+                            notifier.notify("Recovery merge completed.")
+                        else:
+                            log(f"❌  Clean File Merge failed (exit code {res.returncode}):")
+                            for line in res.stderr.splitlines():
+                                log(f"  [merge err] {line}")
+                            notifier.notify("Recovery merge failed.")
+                    except Exception as e:
+                        log(f"❌  Error executing merge: {e}")
+                        notifier.notify("Recovery merge execution error.")
     else:
         if success:
             log("⚠   Skipping recovery merge due to symlink restoration warnings/errors.")
