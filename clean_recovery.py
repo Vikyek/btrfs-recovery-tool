@@ -40,7 +40,7 @@ UNMATCHED_ROOT   = os.path.join(RECOVERY_DIR, "unmatched")
 LOG_FILE         = os.path.join(RECOVERY_DIR, "clean_recovery.log")
 STATS_FILE       = os.path.join(RECOVERY_DIR, "run_stats.json")
 HISTORY_LOG      = os.path.join(RECOVERY_DIR, "history.log")   # never archived
-ARCHIVES_DIR     = os.path.join(RECOVERY_DIR, "archives")
+ARCHIVES_DIR     = os.path.join(ACTIVE_ROOT, "Backups", "btrfs-recovery")
 
 # clean-file-merge dedicated log directory (sibling project)
 CFM_DIR          = os.path.join(ACTIVE_ROOT, "clean-file-merge")
@@ -505,6 +505,7 @@ def shutdown_prompt(success, notifier, symlink_errors, totals):
             log("Running clean-file-merge...")
             notifier.notify("Running recovery merge...")
             
+            on_symlink_val = getattr(args, 'on_symlink', 'ask')
             if HAS_MERGE_MODULE:
                 try:
                     # cfm writes its own session log in ~/clean-file-merge/logs/
@@ -512,7 +513,8 @@ def shutdown_prompt(success, notifier, symlink_errors, totals):
                     cfm_log_fh   = open(cfm_log_path, "a", buffering=1)
                     clean_file_merge.merge_to_active(
                         RECOVERED_ROOT, ACTIVE_ROOT,
-                        log_file=cfm_log_fh, top_level=True
+                        log_file=cfm_log_fh, top_level=True,
+                        on_symlink=on_symlink_val
                     )
                     cfm_log_fh.close()
                     clean_file_merge.history_log(f"Session completed OK -> {cfm_log_path}")
@@ -553,9 +555,9 @@ def shutdown_prompt(success, notifier, symlink_errors, totals):
                             break
                         n += 1
                     if merge_script.endswith(".py"):
-                        cmd = ["sudo", "python3", merge_script, "--src", RECOVERED_ROOT, "--dst", ACTIVE_ROOT, "--log", cfm_log_path]
+                        cmd = ["sudo", "python3", merge_script, "--src", RECOVERED_ROOT, "--dst", ACTIVE_ROOT, "--log", cfm_log_path, "--on-symlink", on_symlink_val]
                     else:
-                        cmd = ["sudo", merge_script, "--src", RECOVERED_ROOT, "--dst", ACTIVE_ROOT, "--log", cfm_log_path]
+                        cmd = ["sudo", merge_script, "--src", RECOVERED_ROOT, "--dst", ACTIVE_ROOT, "--log", cfm_log_path, "--on-symlink", on_symlink_val]
                     try:
                         res = subprocess.run(cmd, capture_output=True, text=True)
                         for line in res.stdout.splitlines():
@@ -1152,6 +1154,7 @@ def main():
     parser.add_argument("--recheck-unmatched", action="store_true", help="Only recheck unmatched files in the unmatched/ directory from the last run")
     parser.add_argument("--recheck-duplicates", action="store_true", help="Scan recovery directories for files that duplicate active files and move them to duplicates/")
     parser.add_argument("--merge", choices=["y", "n"], help="Answer for automatically running recovery merge prompt")
+    parser.add_argument("--on-symlink", choices=["ask", "preserve", "clear", "archive", "skip"], default="ask", help="Handling of working symlink collisions during recovery merge")
     args = parser.parse_args()
 
     # Configure paths dynamically from CLI arguments
@@ -1164,7 +1167,7 @@ def main():
     LOG_FILE = os.path.join(RECOVERY_DIR, "clean_recovery.log")
     STATS_FILE = os.path.join(RECOVERY_DIR, "run_stats.json")
     HISTORY_LOG = os.path.join(RECOVERY_DIR, "history.log")
-    ARCHIVES_DIR = os.path.join(RECOVERY_DIR, "archives")
+    ARCHIVES_DIR = os.path.join(ACTIVE_ROOT, "Backups", "btrfs-recovery")
 
     RUN_DIRS = [RECOVERED_ROOT, DUPLICATES_ROOT, UNMATCHED_ROOT]
 

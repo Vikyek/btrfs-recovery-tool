@@ -92,7 +92,14 @@ options:
   --recheck-unmatched   Only recheck unmatched files in unmatched/ directory from the last run
   --recheck-duplicates  Scan recovery directories for files that duplicate active files and move them to duplicates/
   --merge {y,n}         Answer for automatically running recovery merge prompt
+  --on-symlink {ask,preserve,clear,archive,skip}
+                        Handling of working symlink collisions during recovery merge (default: ask)
 ```
+
+### Logging & Archives
+- **Logs**: Run logs are written to `~/recovery/clean_recovery.log` (persistent history in `~/recovery/history.log`).
+- **Cross-Logs**: Symlinks to `clean-file-merge` sessions are created in `~/recovery/cfm_session_NNN.log`.
+- **Archives**: Gzip archives of completed recovery runs are saved in `~/Backups/btrfs-recovery/run_<label>_<timestamp>.tar.gz` and include squashed log files.
 
 ### `clean-file-merge` (Dependency)
 See the [clean-file-merge](file:///home/v/Projects/clean-file-merge) repository for details on command line options and features.
