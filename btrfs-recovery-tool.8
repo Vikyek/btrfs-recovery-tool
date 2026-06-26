@@ -8,7 +8,7 @@ btrfs-recovery-tool \- Btrfs filesystem recovery, verification, deduplication an
 .B clean_recovery.py
 [\-\-active-root PATH] [\-\-recovery-dir PATH] [\-\-recreated-dir-name NAME] [\-\-duplicates-dir-name NAME] [\-\-unmatched-dir-name NAME] [\-\-resume CHOICE] [\-\-archive CHOICE] [\-\-wipe CHOICE] [\-\-recheck-unmatched] [\-\-recheck-duplicates] [\-\-merge CHOICE]
 .br
-.B recovery_merge.py
+.B clean-file-merge
 [\-\-src PATH] [\-\-dst PATH] [\-\-log PATH]
 .SH DESCRIPTION
 .B btrfs-recovery-tool
@@ -21,7 +21,7 @@ Directly reads the raw block device (e.g., \fI/dev/sdX1\fR) and scans candidate 
 .B Stage 2: clean_recovery.py
 Verifies restored files against the active filesystem. It automatically restores wrongly recovered text-file symlinks, squashes matching directory symlinks (converting them to real directories to prevent circular loops), deduplicates identical files against the active disk, resolves unmatched folder paths from \fBlost+found\fR using file hierarchy matching, and separates remaining unmatched files.
 .TP
-.B Stage 3: recovery_merge.py
+.B Stage 3: clean-file-merge
 Recursively merges the cleaned recovery directory back into the active main filesystem. It moves recovered files atomically and never overwrites existing target files (collisions are skipped and logged). Broken target symlinks at the destination are safely replaced with recovered directories or files.
 .SH OPTIONS
 .SS scan_subvols.py Options
@@ -68,7 +68,7 @@ Skip standard verification and scan the recovery tree for remaining duplicate fi
 .TP
 .BI \-\-merge " {y,n}"
 Pre-specify the response to the automatic recovery merge prompt (y: yes, n: no).
-.SS recovery_merge.py Options
+.SS clean-file-merge Options
 .TP
 .BI \-\-src " PATH"
 Source recovery tree directory to merge from (default: ~/recovery/recreated_dir_tree).

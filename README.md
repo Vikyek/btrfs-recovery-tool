@@ -10,7 +10,7 @@ A robust, three-stage Python toolset designed to scan corrupted Btrfs block devi
 graph TD
     A[Stage 1: scan_subvols.py] -->|Discovers Root Blocks / Gens| B[Run btrfs restore]
     B -->|Restores files to recovery dir| C[Stage 2: clean_recovery.py]
-    C -->|Verifies, deduplicates, and resolves symlinks| D[Stage 3: recovery_merge.py]
+    C -->|Verifies, deduplicates, and resolves symlinks| D[Stage 3: clean_file_merge.py (via clean-file-merge)]
     D -->|Safely merges back| E[Active Filesystem]
 ```
 
@@ -26,7 +26,7 @@ After files are restored into a recovery folder (default `recreated_dir_tree`), 
 * **Unmatched Separation:** Moves unmatched remaining `lost+found_` directories into `unmatched/` for isolation.
 * **Cargo Cache Registry Cache Reconstruction:** Rebuilds Cargo's dependency index caches to clean up package data.
 
-### 3. Stage 3 — Main Filesystem Merging (`recovery_merge.py`)
+### 3. Stage 3 — Main Filesystem Merging (`clean_file_merge.py` via `clean-file-merge`)
 Recursively merges the final cleaned recovery folder back into the active main filesystem:
 * **Safety First:** Moves all files/directories atomically where possible. It **never overwrites** existing active files; collisions are logged and skipped.
 * **Broken Symlink Replacement:** Replaces target broken symlinks in the active filesystem with the recovered folder or files.
@@ -67,7 +67,7 @@ sudo python3 clean_recovery.py \
 ### Stage 3: Merge back to Active Directory
 If run manually, merge the clean recovery directory back:
 ```bash
-sudo python3 recovery_merge.py --src /home/user/recovery/recreated_dir_tree --dst /home/user
+sudo clean-file-merge --src /home/user/recovery/recreated_dir_tree --dst /home/user
 ```
 
 ---
@@ -94,14 +94,8 @@ options:
   --merge {y,n}         Answer for automatically running recovery merge prompt
 ```
 
-### `recovery_merge.py`
-```
-options:
-  -h, --help            show this help message and exit
-  --src PATH            Source recovery tree directory (default: ~/recovery/recreated_dir_tree)
-  --dst PATH            Destination main filesystem directory (default: ~/)
-  --log PATH            Path to log file (default: ~/recovery/recovery_merge.log)
-```
+### `clean-file-merge` (Dependency)
+See the [clean-file-merge](file:///home/v/Projects/clean-file-merge) repository for details on command line options and features.
 
 ### `scan_subvols.py`
 ```
