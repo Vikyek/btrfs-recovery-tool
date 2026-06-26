@@ -112,9 +112,8 @@ options:
   --chunks CHUNKS       Comma-separated offsets:lengths to scan (e.g. 'offset:length,offset:length')
 ```
 
----
-
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under a Custom Permissive License (based on the MIT License, but prohibiting commercial selling) - see the [LICENSE](LICENSE) file for details.
+
 
