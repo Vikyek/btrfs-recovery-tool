@@ -80,6 +80,24 @@ def recursive_chown(path):
         pass
 
 
+def is_null_file(path):
+    """Return True if the file exists, has size > 0, and contains only null bytes."""
+    try:
+        st = os.lstat(path)
+        if not stat.S_ISREG(st.st_mode) or st.st_size == 0:
+            return False
+        with open(path, "rb") as f:
+            while True:
+                chunk = f.read(65536)
+                if not chunk:
+                    break
+                if any(chunk):
+                    return False
+        return True
+    except Exception:
+        return False
+
+
 # ── Logging ───────────────────────────────────────────────────────────────────
 def log(msg):
     print(msg)
@@ -116,6 +134,7 @@ _STAT_KEYS = [
     "empty_dirs_cleaned",
     "unmatched_entries_moved",
     "cargo_dirs_moved",
+    "corrupted_null_files_removed",
 ]
 
 def load_stats():
@@ -1078,7 +1097,7 @@ def main():
     # All these locals must exist even if an exception fires before they're set
     restored = squashed = tombstones_removed = symlink_errors = scanned_active = 0
     matched_dirs = struct_count = total_rec = dup_count = unique_count = 0
-    cleanup_count = unmatched_count = cargo_moved = 0
+    cleanup_count = unmatched_count = cargo_moved = null_removed = 0
     renames_to_execute = {}
     totals = load_stats()   # will be overwritten on success
 
@@ -1282,6 +1301,11 @@ def main():
                     for fname in files:
                         path = os.path.join(root, fname)
                         try:
+                            if is_null_file(path):
+                                log(f"  [corrupted null file] removing: {path}")
+                                os.remove(path)
+                                null_removed += 1
+                                continue
                             st = os.lstat(path)
                             if stat.S_ISREG(st.st_mode):
                                 rec_files.append((path, st.st_size))
@@ -1416,6 +1440,7 @@ def main():
         run["empty_dirs_cleaned"]         = cleanup_count
         run["unmatched_entries_moved"]    = unmatched_count
         run["cargo_dirs_moved"]           = cargo_moved
+        run["corrupted_null_files_removed"] = null_removed
 
         prev   = load_stats()
         totals = {k: prev[k] + run[k] for k in _STAT_KEYS}
@@ -1480,6 +1505,7 @@ def main():
         log("")
         log("  Step 5 — Cleanup")
         log(f"    Empty dirs removed          : {_fmt(cleanup_count, totals['empty_dirs_cleaned'])}")
+        log(f"    Corrupted null files removed: {_fmt(null_removed, totals['corrupted_null_files_removed'])}")
         log("")
         log("  Step 6 — Unmatched")
         log(f"    Unmatched dirs moved        : {_fmt(unmatched_count, totals['unmatched_entries_moved'])}")
