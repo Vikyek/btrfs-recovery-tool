@@ -19,7 +19,7 @@ is a suite of Python scripts designed to assist in recovering, cleaning up, and 
 Directly reads the raw block device (e.g., \fI/dev/sdX1\fR) and scans candidate Btrfs chunk offset ranges for metadata trees containing \fBROOT_ITEM\fR structures matching the specified filesystem UUID. It lists subvolumes, generations, and root tree blocks, which are suitable inputs to feed into the \fBbtrfs restore -t <block>\fR command.
 .TP
 .B Stage 2: clean_recovery.py
-Verifies restored files against the active filesystem. It automatically restores wrongly recovered text-file symlinks, squashes matching directory symlinks (converting them to real directories to prevent circular loops), deduplicates identical files against the active disk, resolves unmatched folder paths from \fBlost+found\fR using file hierarchy matching, and separates remaining unmatched files.
+Verifies restored files against the active filesystem. It automatically restores wrongly recovered text-file symlinks, squashes matching directory symlinks (converting them to real directories to prevent circular loops), decompresses corrupted Btrfs Zstandard frames and extracts raw inline metadata extents, deduplicates identical files against the active disk, resolves unmatched folder paths from \fBlost+found\fR using file hierarchy matching, and separates remaining unmatched files.
 .TP
 .B Stage 3: clean-file-merge
 Recursively merges the cleaned recovery directory back into the active main filesystem. It moves recovered files atomically and never overwrites existing target files (collisions are skipped and logged). Broken target symlinks at the destination are safely replaced with recovered directories or files.

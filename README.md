@@ -10,7 +10,7 @@ A robust, three-stage Python toolset designed to scan corrupted Btrfs block devi
 graph TD
     A[Stage 1: scan_subvols.py] -->|Discovers Root Blocks / Gens| B[Run btrfs restore]
     B -->|Restores files to recovery dir| C[Stage 2: clean_recovery.py]
-    C -->|Verifies, deduplicates, and resolves symlinks| D[Stage 3: clean_file_merge.py (via clean-file-merge)]
+    C -->|Verifies, decompresses, deduplicates, and resolves symlinks| D[Stage 3: clean_file_merge.py (via clean-file-merge)]
     D -->|Safely merges back| E[Active Filesystem]
 ```
 
@@ -21,6 +21,7 @@ This script directly reads a Btrfs raw partition block-by-block. It scans candid
 ### 2. Stage 2 — Symlink Resolution & Deduplication (`clean_recovery.py`)
 After files are restored into a recovery folder (default `recreated_dir_tree`), this stage refines the data by checking it against the active main filesystem:
 * **Symlink Correction:** Restores corrupted text-file symlinks and squashes matching directory symlinks to avoid circular walks.
+* **Automatic Decompression (Step 0.5):** Scans the recovery trees for files containing Btrfs transparent compression artifacts (Zstandard frames). Standard compressed blocks are decompressed, and raw/inline metadata extents are automatically extracted by stripping the 12-byte header and removing null padding, returning the files to their original state.
 * **Deduplication:** Computes file sizes and SHA-256 hashes to match recovered files against files currently in the active directory. Identical files are moved to `duplicates/` to keep the recovery tree clean.
 * **Lost+Found Resolution:** Matches orphan folders inside `lost+found_xxxx` directories based on structural file hierarchies and content hashes, restoring them to their correct relative paths.
 * **Unmatched Separation:** Moves unmatched remaining `lost+found_` directories into `unmatched/` for isolation.
