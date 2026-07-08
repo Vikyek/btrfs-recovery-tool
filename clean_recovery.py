@@ -145,6 +145,7 @@ _STAT_KEYS = [
     "runs",
     "symlinks_restored", "dirs_squashed", "tombstones_removed",
     "symlink_restore_errors",
+    "files_decompressed", "files_extracted_raw", "decompression_errors",
     "active_files_scanned",
     "lf_dirs_matched_hash", "lf_dirs_matched_structural",
     "dirs_merged",
@@ -956,6 +957,86 @@ def step0_restore_and_squash(root_dir, notifier):
     return restored, squashed, tombstones, symlink_errors
 
 
+def step_decompress_corrupted(root_dir, notifier):
+    """
+    Step 0.5: Finds and decompresses zstd-compressed recovered files or inline raw block data.
+    """
+    log(f"Step 0.5: Decompressing corrupted files under {root_dir}...")
+    notifier.notify(f"Decompressing files under {os.path.basename(root_dir)}...")
+    
+    try:
+        import zstandard as zstd
+    except ImportError:
+        log("  [decompress error] zstandard python module not installed, skipping decompression step.")
+        return 0, 0, 0
+
+    decompressed_count = 0
+    extracted_count = 0
+    errors_count = 0
+    
+    ZSTD_MAGIC = b'\x28\xb5\x2f\xfd'
+    
+    if not os.path.isdir(root_dir):
+        return 0, 0, 0
+        
+    for root, dirs, files in os.walk(root_dir, followlinks=False):
+        for fname in files:
+            path = os.path.join(root, fname)
+            try:
+                if os.path.islink(path) or not os.path.isfile(path):
+                    continue
+                    
+                st = os.lstat(path)
+                if st.st_size < 4:
+                    continue
+                    
+                with open(path, 'rb') as f:
+                    header = f.read(4)
+                if header != ZSTD_MAGIC:
+                    continue
+                    
+                # Read full file content
+                with open(path, 'rb') as f:
+                    data = f.read()
+                    
+                # Try Method 1: Standard Zstd Decompression
+                try:
+                    dctx = zstd.ZstdDecompressor()
+                    decompressed = dctx.decompress(data)
+                    with open(path, 'wb') as f:
+                        f.write(decompressed)
+                    decompressed_count += 1
+                    log(f"  [decompress] standard decompressed {path} ({len(decompressed)} bytes)")
+                    continue
+                except Exception as e:
+                    # Fallback to Method 2: Strip 12-byte raw block header
+                    if len(data) > 12:
+                        raw_data = data[12:]
+                        is_text = path.endswith(('.py', '.txt', '.json', '.sh', '.css', '.gitignore', '.envrc', '.cmd', '.psd1'))
+                        
+                        if is_text:
+                            raw_data = raw_data.rstrip(b'\x00').rstrip(b'\r\n').rstrip(b'\n').rstrip(b' ')
+                        else:
+                            if raw_data.startswith(b'\x89PNG'):
+                                iend_pos = raw_data.find(b'IEND')
+                                if iend_pos != -1:
+                                    raw_data = raw_data[:iend_pos + 8]
+                                    
+                        with open(path, 'wb') as f:
+                            f.write(raw_data)
+                        extracted_count += 1
+                        log(f"  [decompress-raw] extracted raw block {path} ({len(raw_data)} bytes)")
+                    else:
+                        log(f"  [decompress error] file too small {path}")
+                        errors_count += 1
+            except Exception as e:
+                log(f"  [decompress error] failed to process {path}: {e}")
+                errors_count += 1
+                
+    log(f"Step 0.5 done: decompressed {decompressed_count} files, extracted {extracted_count} raw blocks, with {errors_count} errors.")
+    return decompressed_count, extracted_count, errors_count
+
+
 # ── is_home_dir & redirect_home_system_dir ────────────────────────────────────
 def is_home_dir(path):
     abs_path = os.path.abspath(path)
@@ -1203,6 +1284,7 @@ def main():
     success = False
     # All these locals must exist even if an exception fires before they're set
     restored = squashed = tombstones_removed = symlink_errors = scanned_active = 0
+    decompressed = extracted_raw = decompress_errors = 0
     matched_dirs = struct_count = total_rec = dup_count = unique_count = 0
     cleanup_count = unmatched_count = cargo_moved = null_removed = 0
     renames_to_execute = {}
@@ -1217,6 +1299,14 @@ def main():
             # ── Step 0: Restore text-file symlinks + squash dir-symlinks ─────────
             restored, squashed, tombstones_removed, symlink_errors = step0_restore_and_squash(
                 RECOVERED_ROOT, notifier)
+
+        # ── Step 0.5: Decompress corrupted files ─────────────────────────────
+        if not getattr(args, "recheck_duplicates", False):
+            d1, e1, err1 = step_decompress_corrupted(RECOVERED_ROOT, notifier)
+            d2, e2, err2 = step_decompress_corrupted(UNMATCHED_ROOT, notifier)
+            decompressed = d1 + d2
+            extracted_raw = e1 + e2
+            decompress_errors = err1 + err2
 
         # ── Step 1: Scan active filesystem ───────────────────────────────────
         notifier.notify("Step 1: Scanning active filesystem...")
@@ -1537,6 +1627,9 @@ def main():
         run["dirs_squashed"]              = squashed
         run["tombstones_removed"]         = tombstones_removed
         run["symlink_restore_errors"]    = symlink_errors
+        run["files_decompressed"]         = decompressed
+        run["files_extracted_raw"]        = extracted_raw
+        run["decompression_errors"]       = decompress_errors
         run["active_files_scanned"]       = scanned_active
         run["lf_dirs_matched_hash"]       = matched_dirs - struct_count
         run["lf_dirs_matched_structural"] = struct_count
@@ -1589,6 +1682,12 @@ def main():
             log(f" ⚠  Symlink restoration errors  : {err_msg}  <-- ATTENTION (Non-critical failures)")
         else:
             log(f"    Symlink restoration errors  : {err_msg}")
+
+        log("")
+        log("  Step 0.5 — Decompress corrupted files")
+        log(f"    Standard decompressed files : {_fmt(decompressed,  totals['files_decompressed'])}")
+        log(f"    Extracted raw block files   : {_fmt(extracted_raw, totals['files_extracted_raw'])}")
+        log(f"    Decompression errors        : {_fmt(decompress_errors, totals['decompression_errors'])}")
 
         log("")
         log("  Step 1 — Active filesystem scan")
