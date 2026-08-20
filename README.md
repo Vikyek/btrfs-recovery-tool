@@ -1,6 +1,24 @@
 # Btrfs Recovery & Merging Toolset
 
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+
 A robust, three-stage Python toolset designed to scan corrupted Btrfs block devices, extract lost files/subvolumes, verify and deduplicate them against the active filesystem, and safely merge recovered files back into the active system without data loss or overwrites.
+
+---
+
+## 📋 Requirements & Dependencies
+
+- **Python:** Python 3.8+
+- **System Utilities:**
+  - `btrfs-progs` (for `btrfs restore`, `btrfs inspect-internal`, etc.)
+  - `zstandard` / `zstd` (for compressed extent decompression)
+  - `tar` and `gzip` (for automated recovery archives)
+  - `sudo` / Root permissions (required for direct raw device scanning and file tree restoration)
+
+Install on Arch Linux:
+```bash
+sudo pacman -S btrfs-progs python zstd
+```
 
 ---
 
@@ -34,11 +52,29 @@ Recursively merges the final cleaned recovery folder back into the active main f
 
 ---
 
-## 🚀 How to Run
+## 🚀 Installation & Setup
 
-### Requirements
-* Python 3.x
-* Root permissions (`sudo`) for raw device reads and file merging.
+### Automated Installation
+```bash
+git clone https://github.com/Vikyek/btrfs-recovery-tool.git
+cd btrfs-recovery-tool
+chmod +x install.sh
+./install.sh
+```
+
+### Manual Installation
+Copy the scripts to `~/.local/bin` and the man page to `~/.local/share/man/man8`:
+```bash
+mkdir -p ~/.local/bin ~/.local/share/man/man8
+install -Dm755 scan_subvols.py ~/.local/bin/btrfs-scan-subvols
+install -Dm755 declutter_home.py ~/.local/bin/btrfs-declutter-home
+install -Dm755 clean_recovery.py ~/.local/bin/btrfs-clean-recovery
+install -Dm644 btrfs-recovery-tool.8 ~/.local/share/man/man8/btrfs-recovery-tool.8
+```
+
+---
+
+## 💻 How to Run & Usage Examples
 
 ### Stage 1: Discover Subvolumes & Generations
 Scan a partition for subvolumes matching a filesystem UUID:
@@ -55,11 +91,7 @@ sudo btrfs restore -r 259 -t <discovered_block_number> /dev/sdX1 /home/user/reco
 ### Stage 2: Verify & Clean Recovery
 Scan and deduplicate the recovered files against the active filesystem:
 ```bash
-sudo python3 clean_recovery.py \
-  --active-root /home/user \
-  --recovery-dir /home/user/recovery \
-  --recreated-dir-name recreated_dir_tree \
-  --merge y
+sudo python3 clean_recovery.py   --active-root /home/user   --recovery-dir /home/user/recovery   --recreated-dir-name recreated_dir_tree   --merge y
 ```
 * **Interactive Prompts Bypass:** Use `--resume y --archive n --wipe n` flags to run the script entirely in non-interactive batch mode.
 * **Rechecking Unmatched Files:** Run `clean_recovery.py --recheck-unmatched` to quickly recheck unmatched `lost+found_` files from previous runs against the active disk.
@@ -97,26 +129,8 @@ options:
                         Handling of working symlink collisions during recovery merge (default: ask)
 ```
 
-### Logging & Archives
-- **Logs**: Run logs are written to `~/recovery/clean_recovery.log` (persistent history in `~/recovery/history.log`).
-- **Cross-Logs**: Symlinks to `clean-file-merge` sessions are created in `~/recovery/cfm_session_NNN.log`.
-- **Archives**: Gzip archives of completed recovery runs are saved in `~/Backups/btrfs-recovery/run_<label>_<timestamp>.tar.gz` and include squashed log files.
-
-### `clean-file-merge` (Dependency)
-See the [clean-file-merge](file:///home/v/Projects/clean-file-merge) repository for details on command line options and features.
-
-### `scan_subvols.py`
-```
-options:
-  -h, --help            show this help message and exit
-  --device DEV          Device block file (default: /dev/sdX1)
-  --uuid UUID           Btrfs filesystem UUID (Required)
-  --chunks CHUNKS       Comma-separated offsets:lengths to scan (e.g. 'offset:length,offset:length')
-```
+---
 
 ## 📄 License
 
 This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
-
-
-
